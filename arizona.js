@@ -1,0 +1,141 @@
+// 🏜️ arizona
+// reusable vanilla html components
+
+let defined_components = {};
+let observer = null;
+
+function cast_attribute_value(value) {
+  try {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    if (!isNaN(value) && value.trim() !== "") return Number(value);
+    if (
+      (value.startsWith("{") && value.endsWith("}")) ||
+      (value.startsWith("[") && value.endsWith("]"))
+    ) {
+      return JSON.parse(value);
+    }
+  } catch (e) {}
+  return value;
+}
+
+function merge_default_attributes(defaults, given) {
+  return { ...defaults, ...given };
+}
+
+function parse_variables(template_html, attributes) {
+  const parsing_regex = /\{\{\s*(\w+)\s*\}\}/g;
+  return template_html.replace(parsing_regex, (match, variable_name) => {
+    return attributes[variable_name] !== undefined
+      ? attributes[variable_name]
+      : match;
+  });
+}
+
+function parse_conditionals(template_html, attributes) {
+  const conditional_regex = /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
+  return template_html.replace(
+    conditional_regex,
+    (match, var_name, content) => {
+      return attributes[var_name] ? content : "";
+    },
+  );
+}
+
+function parse_loops(template_html, attributes) {
+  const loop_regex = /\{\{#each\s+(\w+)\}\}([\s\S]*?)\{\{\/each\}\}/g;
+  return template_html.replace(loop_regex, (match, var_name, content) => {
+    let arr = attributes[var_name];
+    if (Array.isArray(arr)) {
+      return arr
+        .map((item) => content.replace(/\{\{\s*this\s*\}\}/g, item))
+        .join("");
+    }
+    return "";
+  });
+}
+
+function parse_slots(template_html, instance_html) {
+  return template_html.replace(/<slot><\/slot>/g, instance_html);
+}
+
+function parse_meta(component) {
+  let meta = component.querySelector("meta");
+  if (!meta) return {};
+  let attributes = {};
+  for (let attr of meta.attributes) {
+    attributes[attr.name] = cast_attribute_value(attr.value);
+  }
+  return attributes;
+}
+
+function setup_observer() {
+  if (observer) {
+    observer.disconnect();
+  }
+  
+  // so we can watch elements
+  observer = new MutationObserver((mutations) => {
+    observer.disconnect();
+    
+    render_components(defined_components);
+    
+    setTimeout(() => {
+      setup_observer();
+    }, 0);
+  });
+  
+  observer.observe(document.body, {
+    attributes: true,
+    subtree: true,
+    childList: true,
+  });
+}
+
+function render_components(components) {
+  Object.entries(components).forEach(([name, component]) => {
+    let comp_instances = document.querySelectorAll(name);
+    [...comp_instances].forEach((instance) => {
+      let given_attributes = {};
+      for (let attr of instance.attributes) {
+        given_attributes[attr.name] = cast_attribute_value(attr.value);
+      }
+
+      let defaults = parse_meta(component);
+      let attributes = merge_default_attributes(defaults, given_attributes);
+
+      let template_html = component.innerHTML;
+      template_html = parse_slots(template_html, instance.innerHTML);
+      template_html = parse_loops(template_html, attributes);
+      template_html = parse_conditionals(template_html, attributes);
+      template_html = parse_variables(template_html, attributes);
+
+      let div_instance = document.createElement("div");
+      div_instance.innerHTML = template_html;
+      div_instance.className = name.toLowerCase();
+
+      if (instance.parentNode) {
+        instance.parentNode.replaceChild(div_instance, instance);
+      }
+
+      div_instance.querySelector("meta")?.remove();
+
+      // render nested components
+      render_components(components);
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  let components = document.querySelectorAll("component");
+  [...components].forEach((component) => {
+    let meta = parse_meta(component);
+    if (meta.name) {
+      defined_components[meta.name] = component;
+    }
+    component.remove();
+  });
+
+  render_components(defined_components);
+  setup_observer();
+});
