@@ -5,7 +5,7 @@ i wanted a system to easily create re-usable html elements and so i made it
 
 add to your site (put in head):
 ```html
-<script src="https://cdn.jsdelivr.net/gh/cabinfvr/arizona/arizona.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/cabinfvr/arizona@stable/arizona.js"></script>
 ```
 
 ### examples
